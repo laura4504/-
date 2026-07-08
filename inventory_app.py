@@ -24,7 +24,7 @@ def init_db():
             max_stock REAL DEFAULT 100
         )
     ''')
-    # 创建流水日志表 (已集成操作人字段)
+    # 创建流水日志表
     c.execute('''
         CREATE TABLE IF NOT EXISTS inventory_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,10 +109,10 @@ if st.sidebar.button("确认 / 切换操作人"):
 if st.session_state.operator_name == "":
     st.sidebar.info("⚠️ 请先在上方输入姓名并点击确认。")
     st.info("👈 请先在左侧边栏输入您的姓名以开始使用系统。")
-    st.stop() # 这是一个强制停止符，下面的代码都不会执行
+    st.stop() # 强制停止符，下面的代码都不会执行
 # ------------------------------------------
 
-# ===== 侧边栏：操作区 (只有登录后才可见) =====
+# ===== 侧边栏：操作区 =====
 with st.sidebar:
     st.subheader("➕ 添加新商品")
     with st.form("add_product"):
@@ -150,12 +150,11 @@ with st.sidebar:
             op = "in" if "入库" in op_type else "out"
             conn = sqlite3.connect(DB_NAME)
             c = conn.cursor()
-            # 这里自动读取 session 里的名字
             c.execute("INSERT INTO inventory_log (product_id, type, quantity, quality, unit_price, operator) VALUES (?, ?, ?, ?, ?, ?)",
                       (p_id, op, qty, quality, unit_price, st.session_state.operator_name))
             conn.commit()
             conn.close()
-            st.success(f"操作成功！{sel_product} {op_type} {qty} (操作人：{st.session_state.operator_name})")
+            st.success(f"操作成功！{sel_product} {op_type} {qty}")
             st.rerun()
     else:
         st.info("暂无商品，请先添加。")
@@ -188,6 +187,19 @@ with st.sidebar:
 # ===== 主界面区域 =====
 products_df = load_products()
 
+# ===== 核心修复：在内存中计算当前真实库存 =====
+if not products_df.empty:
+    for idx in range(len(products_df)):
+        p_id = products_df.iloc[idx]["id"]
+        conn = sqlite3.connect(DB_NAME)
+        c = conn.cursor()
+        # 算出入库总和减去出库总和
+        c.execute("SELECT SUM(CASE WHEN type='in' THEN quantity ELSE -quantity END) FROM inventory_log WHERE product_id=?", (p_id,))
+        real_stock = c.fetchone()[0]
+        conn.close()
+        # 如果算出来是 None，就赋予 0.0，否则赋予真实的数字
+        products_df.loc[idx, 'stock'] = real_stock if real_stock is not None else 0.0
+
 st.title("📦 智能库存管理系统")
 st.caption(f"当前操作人：{st.session_state.operator_name}")
 
@@ -203,24 +215,14 @@ with tab1:
             total_val = products_df["max_stock"].sum()
             st.metric("设定总库存上限", f"{total_val:.0f}")
 
-            st.dataframe(products_df, use_container_width=True)
-
-            st.dataframe(products_df, use_container_width=True)
-    
-    # 🔴 以下两行是【必须新增】的代码。强迫表格拥有 stock 列，防止报错！
-    products_df['stock'] = 0.0
-    # 🔴 ----------------------------
-
-    st.subheader("以下商品需要关注：")
-    alert_df = products_df[
-        (products_df["stock"] < products_df["min_stock"]) | 
-        (products_df["stock"] > products_df["max_stock"])
-    ].copy()
-    st.subheader("以下商品需要关注：")
-    alert_df = products_df[
-        (products_df["stock"] < products_df["min_stock"]) | 
-        (products_df["stock"] > products_df["max_stock"])
-    ].copy()
+        st.dataframe(products_df, use_container_width=True)
+        
+        st.subheader("以下商品需要关注：")
+        # 此时 products_df 里已经有 'stock' 列了，绝对不会报错
+        alert_df = products_df[
+            (products_df["stock"] < products_df["min_stock"]) | 
+            (products_df["stock"] > products_df["max_stock"])
+        ].copy()
         if not alert_df.empty:
             for _, row in alert_df.iterrows():
                 if row["stock"] < row["min_stock"]:
@@ -235,9 +237,7 @@ with tab1:
 with tab2:
     st.subheader("过去时段统计摘要")
     if not products_df.empty:
-        # 计算简单的统计
         col_a, col_b, col_c = st.columns(3)
-        # 获取所有库存总和（目前只能做个简单展示占位）
         col_a.metric("商品种类", len(products_df))
         col_b.metric("总库存量", f"{products_df['stock'].sum():.0f}")
         col_c.metric("平均库存", f"{products_df['stock'].mean():.0f}")
@@ -246,7 +246,6 @@ with tab2:
         selected_product_trend = st.selectbox("选择要分析的商品", products_df["name"].tolist())
         p_id_trend = products_df[products_df["name"] == selected_product_trend]["id"].iloc[0]
         
-        # 获取近期的数据，比如最近30天
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
         daily_stock = get_daily_stock_series(p_id_trend, start_date, end_date)
@@ -262,7 +261,7 @@ with tab2:
         st.info("暂无商品数据进行分析。")
 
 with tab3:
-    st.subheader("📋 出入库流水记录 (带操作人)")
+    st.subheader("📋 出入库流水记录")
     if not products_df.empty:
         filter_product = st.selectbox("过滤商品 (可选)", ["全部"] + products_df["name"].tolist(), key="log_filter")
         
@@ -278,15 +277,12 @@ with tab3:
             conn.close()
             
             if not log_df.empty:
-                # 转换时间格式
                 log_df['timestamp'] = pd.to_datetime(log_df['timestamp'])
                 log_df['日期'] = log_df['timestamp'].dt.strftime('%Y-%m-%d')
                 log_df['时间'] = log_df['timestamp'].dt.strftime('%H:%M:%S')
                 log_df['年份'] = log_df['timestamp'].dt.year
                 log_df = log_df.drop(columns=['timestamp'])
-                
                 log_df = log_df.rename(columns={"type": "类型", "operator": "操作人"})
-                
                 st.dataframe(log_df, use_container_width=True)
             else:
                 st.info("暂无该商品流水。")
@@ -306,9 +302,7 @@ with tab3:
                 log_df['时间'] = log_df['timestamp'].dt.strftime('%H:%M:%S')
                 log_df['年份'] = log_df['timestamp'].dt.year
                 log_df = log_df.drop(columns=['timestamp'])
-                
                 log_df = log_df.rename(columns={"type": "类型", "operator": "操作人"})
-                
                 st.dataframe(log_df, use_container_width=True)
             else:
                 st.info("系统暂时还没有任何流水记录。")
