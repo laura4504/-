@@ -216,11 +216,11 @@ with tab1:
         (products_df["stock"] < products_df["min_stock"]) | 
         (products_df["stock"] > products_df["max_stock"])
     ].copy()
-        st.subheader("以下商品需要关注：")
-        alert_df = products_df[
-            (products_df["stock"] < products_df["min_stock"]) | 
-            (products_df["stock"] > products_df["max_stock"])
-        ].copy()
+    st.subheader("以下商品需要关注：")
+    alert_df = products_df[
+        (products_df["stock"] < products_df["min_stock"]) | 
+        (products_df["stock"] > products_df["max_stock"])
+    ].copy()
         if not alert_df.empty:
             for _, row in alert_df.iterrows():
                 if row["stock"] < row["min_stock"]:
