@@ -10,7 +10,7 @@ from sklearn.linear_model import LinearRegression
 # ===== 数据库配置 =====
 DB_NAME = "inventory.db"
 
-# ===== 初始化数据库 =====
+# ===== 初始化数据库（带有自动迁移功能，防止旧库报错） =====
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -24,7 +24,7 @@ def init_db():
             max_stock REAL DEFAULT 100
         )
     ''')
-    # 创建流水日志表
+    # 创建流水日志表（第一次初始化时带上 operator 列）
     c.execute('''
         CREATE TABLE IF NOT EXISTS inventory_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,6 +38,13 @@ def init_db():
             FOREIGN KEY(product_id) REFERENCES products(id)
         )
     ''')
+    # ===== 核心修复：如果之前创建的表里没有 operator 列，自动给它加上 =====
+    try:
+        c.execute("ALTER TABLE inventory_log ADD COLUMN operator TEXT DEFAULT '';")
+    except sqlite3.OperationalError:
+        # 如果系统提示"列已存在"，说明已经加过了，直接忽略报错即可
+        pass
+    # ================================================================
     conn.commit()
     conn.close()
 
@@ -53,6 +60,7 @@ def load_products():
 
 def get_inventory_log(product_id):
     conn = sqlite3.connect(DB_NAME)
+    # 注意这里：查询的时候带上了 l.operator
     df = pd.read_sql_query("""
         SELECT l.id, p.name AS 商品, l.type, l.quantity, l.quality, l.unit_price, l.operator, l.timestamp
         FROM inventory_log l
@@ -267,6 +275,7 @@ with tab3:
         
         if filter_product != "全部":
             conn = sqlite3.connect(DB_NAME)
+            # ===== 正确的 SQL 写法 =====
             log_df = pd.read_sql_query("""
                 SELECT l.id, p.name, l.type, l.quantity, l.quality, l.unit_price, l.operator, l.timestamp
                 FROM inventory_log l
@@ -282,14 +291,17 @@ with tab3:
                 log_df['时间'] = log_df['timestamp'].dt.strftime('%H:%M:%S')
                 log_df['年份'] = log_df['timestamp'].dt.year
                 log_df = log_df.drop(columns=['timestamp'])
-                log_df = log_df.rename(columns={"type": "类型", "operator": "操作人"})
+                
+                log_df = log_df.rename(columns={"type": "类型", "operator": "操作人", "name": "商品"})
+                
                 st.dataframe(log_df, use_container_width=True)
             else:
                 st.info("暂无该商品流水。")
         else:
             conn = sqlite3.connect(DB_NAME)
+            # ===== 正确的 SQL 写法（显示全部） =====
             log_df = pd.read_sql_query("""
-                SELECT l.id, p.name AS 商品, l.type, l.quantity, l.quality, l.unit_price, l.operator, l.timestamp
+                SELECT l.id, p.name, l.type, l.quantity, l.quality, l.unit_price, l.operator, l.timestamp
                 FROM inventory_log l
                 JOIN products p ON l.product_id = p.id
                 ORDER BY l.timestamp DESC
@@ -302,7 +314,9 @@ with tab3:
                 log_df['时间'] = log_df['timestamp'].dt.strftime('%H:%M:%S')
                 log_df['年份'] = log_df['timestamp'].dt.year
                 log_df = log_df.drop(columns=['timestamp'])
-                log_df = log_df.rename(columns={"type": "类型", "operator": "操作人"})
+                
+                log_df = log_df.rename(columns={"type": "类型", "operator": "操作人", "name": "商品"})
+                
                 st.dataframe(log_df, use_container_width=True)
             else:
                 st.info("系统暂时还没有任何流水记录。")
