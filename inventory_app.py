@@ -134,7 +134,7 @@ def get_daily_stock_series(product_id, start_date, end_date):
     # 填充无记录日期的库存为前一日值
     if not daily_df.empty:
         full_dates = pd.date_range(start=daily_df["date"].min(), end=daily_df["date"].max(), freq="D")
-        daily_df = daily_df.set_index("date").reindex(full_dates).fillna(method="ffill").reset_index()
+        daily_df = daily_df.set_index("date").reindex(full_dates).ffill().reset_index()
         daily_df.rename(columns={"index": "date"}, inplace=True)
     return daily_df
 
