@@ -189,6 +189,34 @@ with st.sidebar:
     else:
         st.info("请先添加商品")
 
+    # ================== 🗑️ 新增：删除商品功能 ==================
+    st.divider()
+    st.subheader("🗑️ 删除商品")
+    if not products_df.empty:
+        del_product = st.selectbox("选择要删除的商品", products_df["name"].tolist(), key="del_sel")
+        if st.button("⚠️ 确认永久删除该商品", type="primary"):
+            conn = sqlite3.connect(DB_NAME)
+            c = conn.cursor()
+            c.execute("SELECT id FROM products WHERE name = ?", (del_product,))
+            res = c.fetchone()
+            if res:
+                p_id = res[0]
+                try:
+                    # 先删除该商品的所有流水（防止外键约束报错）
+                    c.execute("DELETE FROM inventory_log WHERE product_id = ?", (p_id,))
+                    # 再删除该商品本身
+                    c.execute("DELETE FROM products WHERE id = ?", (p_id,))
+                    conn.commit()
+                    conn.close()
+                    st.success(f"商品【{del_product}】已彻底删除！")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"删除失败: {e}")
+            else:
+                st.warning("未找到该商品！")
+    else:
+        st.info("暂无商品可删除。")
+
 # 主界面
 tab1, tab2, tab3 = st.tabs(["📊 库存总览 & 提醒", "📈 历史趋势 & 预测", "📋 出入库流水"])
 
@@ -316,8 +344,18 @@ with tab3:
                 ORDER BY l.timestamp DESC
             """, conn)
             conn.close()
-    else:
-            # 加上这一行防崩溃判断：如果因为删光了商品导致 filter_product 未定义，直接提示
+            # 🆕 新增：提取日期、时间、年份
+            if not log_df.empty:
+                log_df['timestamp'] = pd.to_datetime(log_df['timestamp'])
+                log_df['日期'] = log_df['timestamp'].dt.strftime('%Y-%m-%d')
+                log_df['时间'] = log_df['timestamp'].dt.strftime('%H:%M:%S')
+                log_df['年份'] = log_df['timestamp'].dt.year
+                log_df = log_df.drop(columns=['timestamp'])
+                st.dataframe(log_df, use_container_width=True)
+            else:
+                st.info("暂无流水记录。")
+        else:
+            # 加上防崩溃判断：如果因为删光了商品导致 filter_product 未定义，直接提示
             if 'filter_product' not in locals():
                 st.info("当前没有商品，请先在侧边栏添加商品后查看流水。")
             else:
@@ -330,6 +368,13 @@ with tab3:
                     log_df["商品"] = filter_product
                     
                     if not log_df.empty:
+                        # 🆕 新增：处理时间显示
+                        log_df['timestamp'] = pd.to_datetime(log_df['timestamp'])
+                        log_df['日期'] = log_df['timestamp'].dt.strftime('%Y-%m-%d')
+                        log_df['时间'] = log_df['timestamp'].dt.strftime('%H:%M:%S')
+                        log_df['年份'] = log_df['timestamp'].dt.year
+                        log_df = log_df.drop(columns=['timestamp'])
+                        
                         st.dataframe(log_df, use_container_width=True)
                     else:
                         st.info("暂无流水。")
