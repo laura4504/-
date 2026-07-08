@@ -203,7 +203,7 @@ with tab1:
             total_val = products_df["max_stock"].sum()
             st.metric("设定总库存上限", f"{total_val:.0f}")
 
-        st.dataframe(products_df, use_container_width=True)
+            st.dataframe(products_df, use_container_width=True)
 
             st.dataframe(products_df, use_container_width=True)
     
