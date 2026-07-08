@@ -268,7 +268,7 @@ with tab3:
         if filter_product != "全部":
             conn = sqlite3.connect(DB_NAME)
             log_df = pd.read_sql_query("""
-                SELECT l.id, p.name AS 商品, l.type, l.quantity, l.quality, l.unit_price, l.operator, l.timestamp
+                SELECT l.id, p.name, l.type, l.quantity, l.quality, l.unit_price, l.operator, l.timestamp
                 FROM inventory_log l
                 JOIN products p ON l.product_id = p.id
                 WHERE p.name = ?
