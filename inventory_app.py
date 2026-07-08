@@ -204,7 +204,18 @@ with tab1:
             st.metric("设定总库存上限", f"{total_val:.0f}")
 
         st.dataframe(products_df, use_container_width=True)
-        
+
+            st.dataframe(products_df, use_container_width=True)
+    
+    # 🔴 以下两行是【必须新增】的代码。强迫表格拥有 stock 列，防止报错！
+    products_df['stock'] = 0.0
+    # 🔴 ----------------------------
+
+    st.subheader("以下商品需要关注：")
+    alert_df = products_df[
+        (products_df["stock"] < products_df["min_stock"]) | 
+        (products_df["stock"] > products_df["max_stock"])
+    ].copy()
         st.subheader("以下商品需要关注：")
         alert_df = products_df[
             (products_df["stock"] < products_df["min_stock"]) | 
