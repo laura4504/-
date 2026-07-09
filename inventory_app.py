@@ -8,7 +8,7 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 
 # ===== 数据库配置 =====
-DB_NAME = "inventory.db"
+DB_NAME = "inventory_v2.db"
 
 # ===== 初始化数据库（带有自动迁移功能，防止旧库报错） =====
 def init_db():
