@@ -159,7 +159,7 @@ with st.sidebar:
             conn = sqlite3.connect(DB_NAME)
             c = conn.cursor()
             c.execute("INSERT INTO inventory_log (product_id, type, quantity, quality, unit_price, operator) VALUES (?, ?, ?, ?, ?, ?)",
-                      (p_id, op, qty, quality, unit_price, st.session_state.operator_name))
+                     (p_id, op, qty, quality, unit_price, st.session_state.operator_name))
             conn.commit()
             conn.close()
             st.success(f"操作成功！{sel_product} {op_type} {qty}")
